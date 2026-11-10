@@ -35,7 +35,12 @@ namespace CasualtiesSize
         private bool cameraBaseKnown;
         private Camera cameraHoldingBase;
 
+        private const string PixelPerfectTypeName = "UnityEngine.Experimental.Rendering.Universal.PixelPerfectCamera";
+
         private SizedBody localSized;
+        private Component pixelPerfectOwner;
+        private int baseResolutionX;
+        private int baseResolutionY;
 
         private void LateUpdate()
         {
@@ -62,15 +67,38 @@ namespace CasualtiesSize
         private void FollowCamera(SizedBody sized)
         {
             Camera camera = Camera.main;
-            if (camera == null || !camera.orthographic) return;
+            if (camera == null) return;
+            float zoom = Core.SizeMath.CameraZoomMult(SizeBook.Rules, sized.Current);
+            Component pixelPerfect = camera.GetComponent(PixelPerfectTypeName);
+            if (pixelPerfect != null)
+            {
+                ZoomPixelPerfect(pixelPerfect, zoom);
+                return;
+            }
+            if (!camera.orthographic) return;
             if (!cameraBaseKnown || cameraHoldingBase != camera)
             {
                 cameraBaseSize = camera.orthographicSize;
                 cameraHoldingBase = camera;
                 cameraBaseKnown = true;
             }
-            float zoom = Core.SizeMath.CameraZoomMult(SizeBook.Rules, sized.Current);
             camera.orthographicSize = cameraBaseSize * zoom;
+        }
+
+        private void ZoomPixelPerfect(Component pixelPerfect, float zoom)
+        {
+            System.Type type = pixelPerfect.GetType();
+            System.Reflection.PropertyInfo width = type.GetProperty("refResolutionX");
+            System.Reflection.PropertyInfo height = type.GetProperty("refResolutionY");
+            if (width == null || height == null) return;
+            if (pixelPerfectOwner != pixelPerfect)
+            {
+                pixelPerfectOwner = pixelPerfect;
+                baseResolutionX = (int)width.GetValue(pixelPerfect, null);
+                baseResolutionY = (int)height.GetValue(pixelPerfect, null);
+            }
+            width.SetValue(pixelPerfect, Mathf.Max(1, Mathf.RoundToInt(baseResolutionX * zoom)), null);
+            height.SetValue(pixelPerfect, Mathf.Max(1, Mathf.RoundToInt(baseResolutionY * zoom)), null);
         }
     }
 }
