@@ -48,4 +48,4 @@ cd tests/CoreTests && dotnet run -c Release     # offline: formulas, rules, pars
 python tests/pair/test_size_pair.py               # needs an idle machine: host and client game from the harness
 ```
 
-The pair test installs nothing; it runs the plugin already installed in the game folder (and a copy of the folder for the client). Run it only while no `.game.lock` exists. It follows the harness rules in `C:/Hive/CU TA Harness/README.md`.
+The pair test installs nothing; it runs the plugin already installed in the game folder (and a copy of the folder for the client). Run it only while no `.game.lock` exists. It follows the harness rules in the README of the sibling `CU TA Harness` folder (set `CU_TA_HARNESS` to use another location).

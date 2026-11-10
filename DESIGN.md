@@ -42,7 +42,7 @@ Bridge/        the only code that touches Together types. Loaded only if Togethe
 tests/         SizeCore.Tests (offline console program) and pair tests for the harness.
 ```
 
-`SizeCore` compiles into the plugin and into the offline test program, the same shape as `CU TA Harness/plugin-tests`.
+`SizeCore` compiles into the plugin and into the offline test program, the same shape as the harness `plugin-tests` in the sibling `CU TA Harness` folder.
 
 Soft dependency: `[BepInDependency("CasualtiesMP", SoftDependency)]`. `TogetherBridge` is a separate class whose methods are called only after `Chainloader.PluginInfos.ContainsKey("CasualtiesMP")`; the JIT does not resolve Together types until such a method runs, so the plugin loads in singleplayer with no Together DLL. Together and LiteNetLib are compile references with `Private=false`.
 

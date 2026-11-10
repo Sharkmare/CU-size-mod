@@ -5,7 +5,7 @@ import os
 import sys
 import time
 
-HARNESS_ROOT = os.environ.get("CU_TA_HARNESS", r"C:\Hive\CU TA Harness")
+HARNESS_ROOT = os.environ.get("CU_TA_HARNESS") or os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "CU TA Harness"))
 sys.path.insert(0, os.path.join(HARNESS_ROOT, "client"))
 
 from casualtieslink import Game  # noqa: E402
