@@ -62,6 +62,14 @@ class PackageTests(unittest.TestCase):
             self.assertNotIn(word, text, word)
             self.assertNotIn(word, names, word)
 
+    def test_readme_has_no_internal_wording(self):
+        with open(os.path.join(package.ROOT, "README.md"), encoding="utf-8") as handle:
+            text = handle.read().lower()
+        for word in BANNED_WORDS:
+            if word == "github":
+                continue
+            self.assertNotIn(word, text, word)
+
     def test_version_and_requirement_lines_are_present(self):
         with zipfile.ZipFile(self.zip_path) as archive:
             text = shipped_text(archive)

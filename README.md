@@ -1,51 +1,64 @@
 # CasualtiesSize
 
-A BepInEx 5 plugin for Casualties: Unknown. It sets body size per player, in singleplayer and, with the Together mod, in multiplayer, and makes melee damage, digging, reach, carry capacity, stomping, picking up and eating depend on the ratio of two bodies' sizes. Design and source citations: [DESIGN.md](DESIGN.md).
+Change how big players are in Casualties: Unknown, on your own or together with other players.
 
-It is separate from Together and works without it. Debug output is off.
+A size changes what a body can do:
+
+- Small bodies fall more slowly, take less fall damage, weigh less when carried, and take more damage from larger players' hits.
+- Large bodies hit harder, reach further, dig faster and carry more.
+- Everything between two bodies depends on the ratio of their sizes, so it works for any pair: small and normal, normal and large, small and large.
+- Stature stays: a character's own size is multiplied by the factor you set.
+
+## Requirements
+
+- Casualties: Unknown with BepInEx 5.4.23.5
+- For multiplayer: the Together co-op mod, version 5.4.1 or newer, installed by every player
+- Every player in a multiplayer game needs this plugin. A player without it sees no size change.
 
 ## Install
 
-```bash
-dotnet build -c Release
-python tools/install.py            # refuses while the game runs
-python tools/install.py --remove
-```
+1. Close the game.
+2. Unzip the release into the game folder (the one that contains `CasualtiesUnknown.exe`), so that `BepInEx/plugins/CasualtiesSize/CasualtiesSize.dll` exists.
+3. Start the game.
 
-The plugin lands in `BepInEx/plugins/CasualtiesSize/`. The build reads the game's `Managed` folder, `BepInEx/core` and, for the multiplayer bridge, `BepInEx/plugins/Together/CasualtiesMP.dll` and `LiteNetLib.dll` (override with `-p:GameDir=...` or `-p:TogetherDir=...`). Together is loaded only if present; without it the bridge is never touched.
+To remove it, delete the folder `BepInEx/plugins/CasualtiesSize`.
 
-## Console
+## Commands
+
+Open the console with the ` key.
 
 | Command | Effect |
 |---|---|
-| `size <target> <factor>` | Set a size: `2`, `x0.5`, `150%`. It multiplies the character's own stature. |
-| `size <target> reset` | Back to the prefab size. |
+| `size <target> <factor>` | Set a size, for example `size @m 2`, `size Bob 0.5`, `size @a 1.5`. Also `x0.5` and `150%`. |
+| `size <target> reset` | Back to normal size. |
 | `size <target>` | Show one size. |
-| `sizes` | List every body that is not size 1. |
-| `sizerule [name [value]]` | Show or set a rule. Host only in multiplayer. |
-| `pickup <holder> <target>` | A body at least `PickupRatio` times larger lifts another. |
-| `eat <eater> <target>` | A body at least `EatRatio` times larger swallows another (rule `EatEnabled`, default on). |
+| `sizes` | List everyone who is not normal size. |
+| `sizerule [name [value]]` | Show or change the size rules. In multiplayer only the host can change them. |
+| `pickup <holder> <target>` | A body at least 1.5 times larger lifts another. Experimental. |
+| `eat <eater> <target>` | A body at least 2 times larger swallows another. Experimental. |
 | `release <target>` | Let a held or swallowed body go. |
 
-Targets are Together's: `@m` you, `@a` everyone, `@o` others, `@r` and `@r:N` random, `@c` at the cursor, `id:N`, `body:N`, `team:`, a name or prefix. In singleplayer every macro is the one player body. Using `size` switches achievements off until restart, like the game's own cheat commands.
+Targets: `@m` yourself, `@a` everyone, `@o` everyone else, `@r` a random player, `@c` the player at your cursor, `id:N`, or a name.
 
-## Rules
+Size limits are 0.25 to 4; anything outside is refused with a message.
 
-`sizerule` lists every rule with its default and bounds; they are defined in `src/Core/SizeRules.cs`. The host's values reach clients with the welcome packet and on every change.
+By default anyone may change anyone's size. The host can restrict that with `sizerule SizePermission 1` (players change only themselves) or `2` (only the host changes sizes). `sizerule` lists every other rule, such as the strength of damage scaling and the size ratios needed to stomp, pick up or eat.
 
-## Held and swallowed
+A held or swallowed player keeps their camera and console and presses jump to struggle free. A swallowed player slowly takes damage and is released after a time limit.
 
-A held body is pinned to the holder's hand. A swallowed body is pinned to the holder's torso, drawn faded, and loses skin and muscle on its vital limbs each second (`EatDigestionDps` times the size ratio) while the eater gains hunger. The captured player keeps their camera and console and presses jump to struggle: `EatEscapeStruggles` presses, decaying one per second, break free. A swallowed body is also released after `EatMaxSeconds`, and when the eater falls unconscious or dies.
+Sizes are kept until the game is closed or everyone leaves. Using `size` turns achievements off until the game is restarted, as with the game's own cheat commands.
 
-## Multiplayer
+## Known limitations
 
-The host decides. A client without the plugin is never sent anything and sees no change to sizes; a host without the plugin leaves a client's `size` with the message that no answer came. A protocol mismatch makes the client refuse sizes and say so. Details in DESIGN.md.
+- Eating, picking up and stomping other players are experimental.
+- Camera zoom for large and small players may not apply.
+- Footstep and voice pitch do not change with size.
+- Sizes are not saved with a save file.
 
-## Tests
+## Credits
 
-```bash
-cd tests/CoreTests && dotnet run -c Release     # offline: formulas, rules, parsing, wire, capture timing
-python tests/pair/test_size_pair.py               # needs an idle machine: host and client game from the harness
-```
+Casualties: Unknown is made by its developers. BepInEx and Harmony are made by their authors. Multiplayer support is built on the Together co-op mod.
 
-The pair test installs nothing; it runs the plugin already installed in the game folder (and a copy of the folder for the client). Run it only while no `.game.lock` exists. It follows the harness rules in the README of the sibling `CU TA Harness` folder (set `CU_TA_HARNESS` to use another location).
+## Development
+
+Build with `dotnet build -c Release`, install with `python tools/install.py`, and make a release zip with `python tools/build_package.py` (it keeps any earlier zip of the same name). See [docs/dev/TESTING.md](docs/dev/TESTING.md) for tests and [docs/dev/DESIGN.md](docs/dev/DESIGN.md) for the design, hook points and network protocol.

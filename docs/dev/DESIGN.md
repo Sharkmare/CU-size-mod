@@ -39,10 +39,10 @@ A separate BepInEx 5 plugin (`CasualtiesSize`, GUID `hive.casualties.size`) that
 SizeCore/      pure C#, no Unity, no BepInEx. Formulas, rules, target-spec and command parsing, wire format.
 Plugin/        the BepInEx plugin: SizeBook (who has what size), BodySizer (applies it), commands, Harmony patches, eating.
 Bridge/        the only code that touches Together types. Loaded only if Together is present.
-tests/         SizeCore.Tests (offline console program) and pair tests for the harness.
+tests/         SizeCore.Tests (offline console program) and two-instance tests (see TESTING.md).
 ```
 
-`SizeCore` compiles into the plugin and into the offline test program, the same shape as the harness `plugin-tests` in the sibling `CU TA Harness` folder.
+`SizeCore` compiles into the plugin and into the offline test program, the same shape as the plugin tests of the test harness.
 
 Soft dependency: `[BepInDependency("CasualtiesMP", SoftDependency)]`. `TogetherBridge` is a separate class whose methods are called only after `Chainloader.PluginInfos.ContainsKey("CasualtiesMP")`; the JIT does not resolve Together types until such a method runs, so the plugin loads in singleplayer with no Together DLL. Together and LiteNetLib are compile references with `Private=false`.
 
@@ -137,7 +137,7 @@ Together's own mod-list check, read from source: the join packet carries the Bep
 - Host without the plugin: a client's `Hello` goes unanswered; `size` replies "waiting for the host to answer, or the host does not run CasualtiesSize" and changes nothing locally.
 - Protocol mismatch: `Welcome` carries the host version; a different version makes the client refuse and print why.
 
-Proofs queued for the pair rig (none run yet, see README): host sizes self and the client sees it; client sizes the host; reset; permission rule; `sizes` listing; late join by `disconnect` then `connect`; a client copy without the plugin joins, is not crashed, and is not changed. Not testable without the host menu: enforcement on (toggle is a GUI control with no launch flag).
+Proofs queued for the two-instance test (none run yet, see README): host sizes self and the client sees it; client sizes the host; reset; permission rule; `sizes` listing; late join by `disconnect` then `connect`; a client copy without the plugin joins, is not crashed, and is not changed. Not testable without the host menu: enforcement on (toggle is a GUI control with no launch flag).
 
 ## Pick up and eat
 
@@ -150,7 +150,7 @@ One state, `Capture(holder, held, mode)`, `mode` Held or Swallowed. Fits the gam
 - Held and Swallowed both end by placing the held body at the holder's feet-front with a short stun.
 - In multiplayer the holder's host runs the state machine; the captured player's own client applies the pin (it owns its body); `Capture` messages keep everyone's view consistent.
 
-**Unverified:** the pin in multiplayer where the captured body is owned by another client. Proof in the pair rig: host swallows client, both games read positions and `digestion` counters.
+**Unverified:** the pin in multiplayer where the captured body is owned by another client. Proof in the two-instance test: host swallows client, both games read positions and `digestion` counters.
 
 ## Not implemented (by design or deferred)
 
