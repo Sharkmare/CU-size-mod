@@ -11,7 +11,7 @@ DEFAULT_OUTPUT = os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesS
 PLUGIN_SOURCE = os.path.join(ROOT, "src", "Plugin", "Plugin.cs")
 PLUGIN_ENTRY = "BepInEx/plugins/CasualtiesSize/CasualtiesSize.dll"
 INSTALL_ENTRY = "INSTALL.txt"
-TOGETHER_REQUIREMENT = "the Together 5.4.0-dune.2 package (CasualtiesTogether-dune.zip)"
+TOGETHER_REQUIREMENT = "exactly the Together 5.4.1-dune.2 package (CasualtiesTogether-dune.zip), on every player"
 ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 INSTALL_TEMPLATE = """CasualtiesSize {version}
