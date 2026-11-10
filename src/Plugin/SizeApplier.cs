@@ -37,9 +37,13 @@ namespace CasualtiesSize
 
         private SizedBody localSized;
 
-        private void Update()
+        private void LateUpdate()
         {
             if (localSized != null) FollowCamera(localSized);
+        }
+
+        private void Update()
+        {
             if (Time.unscaledTime < nextScan) return;
             nextScan = Time.unscaledTime + ScanIntervalSeconds;
             localSized = null;

@@ -405,10 +405,10 @@ namespace CasualtiesSize
     {
         public static void Apply(Harmony harmony)
         {
-            var target = AccessTools.Method("Together.CombatStuff:DoPVPMeleeDamage");
+            var target = AccessTools.Method("Together.Body_Attack_MultiplayerPatch:DoPVPMeleeDamage");
             if (target == null)
             {
-                Plugin.Log.LogWarning("CombatStuff.DoPVPMeleeDamage not found, victim size will not change melee damage in multiplayer");
+                Plugin.Log.LogWarning("Body_Attack_MultiplayerPatch.DoPVPMeleeDamage not found, victim size will not change melee damage in multiplayer");
                 return;
             }
             harmony.Patch(target, prefix: new HarmonyMethod(typeof(PvpFragilityPatch), nameof(Prefix)));
