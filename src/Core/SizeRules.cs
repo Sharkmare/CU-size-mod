@@ -40,7 +40,8 @@ namespace CasualtiesSize.Core
             new RuleDefinition("DamageExponent", 0.75f, 0f, 3f, false, "Melee damage and victim fragility follow (attacker size / victim size) to this power."),
             new RuleDefinition("DamageMultMin", 0.25f, 0.01f, 1f, false, "Lower clamp of a damage multiplier."),
             new RuleDefinition("DamageMultMax", 4f, 1f, 100f, false, "Upper clamp of a damage multiplier."),
-            new RuleDefinition("FragilityExponent", 0.5f, 0f, 3f, false, "Impact damage taken from the world follows size to the negative of this power."),
+            new RuleDefinition("FallDamageExponent", 0.5f, 0f, 3f, false, "Impact and fall damage taken from the world follows size to this power, so small bodies take less."),
+            new RuleDefinition("FallGravityExponent", 0.5f, 0f, 2f, false, "Gravity on the body follows size to this power, so small bodies gain speed more slowly in a fall."),
             new RuleDefinition("DigExponent", 1f, 0f, 3f, false, "Block and building damage per swing follows size to this power."),
             new RuleDefinition("DigMultMin", 0.25f, 0.01f, 1f, false, "Lower clamp of the dig multiplier."),
             new RuleDefinition("DigMultMax", 8f, 1f, 100f, false, "Upper clamp of the dig multiplier."),
@@ -77,7 +78,8 @@ namespace CasualtiesSize.Core
         public float DamageExponent { get { return this["DamageExponent"]; } }
         public float DamageMultMin { get { return this["DamageMultMin"]; } }
         public float DamageMultMax { get { return this["DamageMultMax"]; } }
-        public float FragilityExponent { get { return this["FragilityExponent"]; } }
+        public float FallDamageExponent { get { return this["FallDamageExponent"]; } }
+        public float FallGravityExponent { get { return this["FallGravityExponent"]; } }
         public float DigExponent { get { return this["DigExponent"]; } }
         public float DigMultMin { get { return this["DigMultMin"]; } }
         public float DigMultMax { get { return this["DigMultMax"]; } }

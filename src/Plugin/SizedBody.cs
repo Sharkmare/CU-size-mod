@@ -20,6 +20,9 @@ namespace CasualtiesSize
         private float[] prefabLimbMass;
         private Vector3[] gameLimbScale;
         private Vector3[] writtenLimbScale;
+        private float[] prefabLimbGravity;
+        private float bodyGravityRaw = 1f;
+        private float bodyGravityWritten = float.NaN;
         private float appliedForMass = 1f;
         private bool captured;
 
@@ -56,11 +59,13 @@ namespace CasualtiesSize
             prefabOriginalColliderSize = BodyOriginalColliderSize(Body);
             prefabBodyMass = BodyBaseMass(Body);
             prefabLimbMass = new float[Body.limbs.Length];
+            prefabLimbGravity = new float[Body.limbs.Length];
             gameLimbScale = new Vector3[Body.limbs.Length];
             writtenLimbScale = new Vector3[Body.limbs.Length];
             for (int i = 0; i < Body.limbs.Length; i++)
             {
                 prefabLimbMass[i] = Body.limbs[i].baseMass;
+                prefabLimbGravity[i] = Body.limbs[i].rb != null ? Body.limbs[i].rb.gravityScale : 1f;
                 gameLimbScale[i] = Body.limbs[i].transform.localScale;
                 writtenLimbScale[i] = gameLimbScale[i];
             }
@@ -79,6 +84,7 @@ namespace CasualtiesSize
                 return;
             }
             ApplyPose();
+            ApplyGravity();
             if (changed || !Mathf.Approximately(appliedForMass, Current)) ApplyMass(changed);
             ApplyHeldItems();
         }
@@ -103,6 +109,17 @@ namespace CasualtiesSize
                 limb.localScale = scaled;
                 writtenLimbScale[i] = scaled;
             }
+        }
+
+        private void ApplyGravity()
+        {
+            float multiplier = SizeMath.GravityMult(SizeBook.Rules, Current);
+            float seen = Body.rb.gravityScale;
+            if (float.IsNaN(bodyGravityWritten) || seen != bodyGravityWritten) bodyGravityRaw = seen;
+            bodyGravityWritten = bodyGravityRaw * multiplier;
+            Body.rb.gravityScale = bodyGravityWritten;
+            for (int i = 0; i < Body.limbs.Length; i++)
+                if (Body.limbs[i].rb != null) Body.limbs[i].rb.gravityScale = prefabLimbGravity[i] * multiplier;
         }
 
         private void ApplyMass(bool rebuildJoints)
@@ -150,6 +167,9 @@ namespace CasualtiesSize
             Body.heightMultiplier = prefabHeightMultiplier;
             BodyOriginalColliderSize(Body) = prefabOriginalColliderSize;
             Body.col.offset = prefabColliderOffset;
+            Body.rb.gravityScale = bodyGravityRaw;
+            for (int i = 0; i < Body.limbs.Length; i++)
+                if (Body.limbs[i].rb != null) Body.limbs[i].rb.gravityScale = prefabLimbGravity[i];
         }
     }
 }

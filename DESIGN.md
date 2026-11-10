@@ -72,7 +72,8 @@ All strengths are named numbers in `SizeRules` with the defaults below; the host
 | Melee and dig damage by the attacker | `Clamp(size^DamageExponent, DamageMultMin, DamageMultMax)` on `atk.damage` and `atk.structuralDamage` | exponent 0.75, clamp 0.25..4 |
 | Fragility of the victim | `Clamp(size^-DamageExponent, ...)` on PvP melee `armstrength` | same |
 | Pair product | attacker term times victim term equals `Clamp((a/v)^DamageExponent)` when no clamp bites | tested |
-| Environmental fragility | `Clamp(size^-FragilityExponent, ...)` on `Limb.ImpactDamage` force | 0.5 |
+| Fall and impact damage from the world | `Clamp(size^FallDamageExponent, DamageMultMin, DamageMultMax)` on `Limb.ImpactDamage` force: small bodies take less, big more | 0.5 |
+| Fall gravity | `size^FallGravityExponent` on the Body and limb `gravityScale`: small bodies gain speed more slowly | 0.5 |
 | Dig speed | `Clamp(size^DigExponent, DigMultMin, DigMultMax)` on `atk.structuralDamage` | 1.0, clamp 0.25..8 |
 | Reach | `atk.distance * size^ReachExponent` | 0.5 |
 | Carry capacity | `maxEncumberance * size^CarryExponent` | 2.0 |

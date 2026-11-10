@@ -35,7 +35,12 @@ namespace CasualtiesSize.Core
 
         public static float WorldImpactMult(SizeRules rules, float victimSize)
         {
-            return Clamp(Pow(victimSize, -rules.FragilityExponent), rules.DamageMultMin, rules.DamageMultMax);
+            return Clamp(Pow(victimSize, rules.FallDamageExponent), rules.DamageMultMin, rules.DamageMultMax);
+        }
+
+        public static float GravityMult(SizeRules rules, float size)
+        {
+            return Pow(size, rules.FallGravityExponent);
         }
 
         public static float DigMult(SizeRules rules, float size)

@@ -107,7 +107,10 @@ namespace CasualtiesSize.Tests
                 Check.True(SizeMath.ReachMult(rules, 2f) > 1f, "reach");
                 Check.Near(4f, SizeMath.CarryMult(rules, 2f), 1e-4f, "carry follows mass at exponent 2");
                 Check.Near(4f, SizeMath.MassMult(2f), 1e-4f, "mass is area");
-                Check.True(SizeMath.WorldImpactMult(rules, 0.5f) > 1f, "small ones take more impact damage");
+                Check.True(SizeMath.WorldImpactMult(rules, 0.5f) < 1f, "small ones take less fall damage");
+                Check.True(SizeMath.WorldImpactMult(rules, 2f) > 1f, "big ones take more fall damage");
+                Check.True(SizeMath.GravityMult(rules, 0.5f) < 1f && SizeMath.GravityMult(rules, 2f) > 1f, "small ones fall more slowly");
+                Check.Near(1f, SizeMath.GravityMult(rules, 1f), 1e-6f, "normal gravity at size 1");
             });
 
             suite.Add("easing reaches the target and never overshoots", () =>
