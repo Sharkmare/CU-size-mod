@@ -38,6 +38,10 @@ namespace CasualtiesSize
             Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Sizes", ClientReceiveSizes);
             Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Rules", ClientReceiveRules);
             Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Reply", ClientReceiveReply);
+            Multiplayer.RegisterCustomServerReceiver(MessagePrefix + "Struggle", HostReceiveStruggle);
+            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Captures", ClientReceiveCaptures);
+            CaptureBook.Broadcast = keys => BroadcastCaptures();
+            CaptureBook.HealthChanged = QueueHealthSync;
             ScavPlayer.OnPlayerLeft += HostPlayerLeft;
             Harmony harmony = new Harmony(Plugin.Guid + ".together");
             PvpFragilityPatch.Apply(harmony);
@@ -88,6 +92,7 @@ namespace CasualtiesSize
                 return;
             }
             HelloedClients.Add((ushort)sender.playerId);
+            BroadcastCaptures();
             NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Welcome");
             writer.Put(SizeWire.ProtocolVersion);
             writer.PutBytesWithLength(SizeWire.EncodeRules(SizeBook.Rules.Snapshot()));
@@ -173,6 +178,73 @@ namespace CasualtiesSize
             ConsoleOutput.Write(reader.GetString(400));
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static bool IsServer()
+        {
+            return Net.IsServer;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int LocalKey()
+        {
+            return ScavPlayer.LocalPlayer == null ? -1 : ScavPlayer.LocalPlayer.playerId;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void SendStruggle()
+        {
+            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Struggle");
+            Net.Client_Send(DeliveryMethod.ReliableOrdered, writer);
+        }
+
+        private static void HostReceiveStruggle(ScavPlayer sender, NetDataReader reader)
+        {
+            if (!Net.IsServer) return;
+            CaptureEntry entry;
+            if (CaptureBook.ByHeld.TryGetValue(sender.playerId, out entry)) entry.Tracker.Struggle();
+        }
+
+        public static void BroadcastCaptures()
+        {
+            if (!Net.IsServer || HelloedClients.Count == 0) return;
+            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Captures");
+            List<KeyValuePair<int, KeyValuePair<int, byte>>> table = CaptureBook.ToWire();
+            writer.Put((ushort)table.Count);
+            foreach (KeyValuePair<int, KeyValuePair<int, byte>> row in table)
+            {
+                writer.Put(row.Key);
+                writer.Put(row.Value.Key);
+                writer.Put(row.Value.Value);
+            }
+            Net.Server_SendToClients(DeliveryMethod.ReliableOrdered, writer, HelloedIds());
+        }
+
+        private static void ClientReceiveCaptures(NetDataReader reader)
+        {
+            if (Net.IsServer) return;
+            int count = reader.GetUShort();
+            if (count > 256) return;
+            List<KeyValuePair<int, KeyValuePair<int, byte>>> table = new List<KeyValuePair<int, KeyValuePair<int, byte>>>();
+            for (int i = 0; i < count; i++)
+            {
+                int held = reader.GetInt();
+                int holder = reader.GetInt();
+                byte mode = reader.GetByte();
+                if (mode > 1) return;
+                table.Add(new KeyValuePair<int, KeyValuePair<int, byte>>(held, new KeyValuePair<int, byte>(holder, mode)));
+            }
+            CaptureBook.ReplaceFromWire(table);
+        }
+
+        private static readonly System.Reflection.MethodInfo HealthQueue = AccessTools.Method("Together.MedicalSync:Server_QueueSendCharacterHealth");
+
+        private static void QueueHealthSync(Body body)
+        {
+            if (HealthQueue == null || body == null) return;
+            NetBody netBody = body.GetComponent<NetBody>();
+            if (netBody != null) HealthQueue.Invoke(null, new object[] { netBody, true });
+        }
+
         public static void BroadcastSizes()
         {
             if (!Net.IsServer || HelloedClients.Count == 0) return;
@@ -200,6 +272,9 @@ namespace CasualtiesSize
         {
             if (!Net.IsServer) return;
             HelloedClients.Remove((ushort)player.playerId);
+            CaptureBook.End(player.playerId);
+            foreach (CaptureEntry held in new List<CaptureEntry>(CaptureBook.ByHeld.Values))
+                if (held.HolderKey == player.playerId) CaptureBook.End(held.HeldKey);
             if (SizeBook.IsSized(player.playerId))
             {
                 SizeBook.Remove(player.playerId);
@@ -215,6 +290,7 @@ namespace CasualtiesSize
                 wasRunning = running;
                 SizeBook.ReplaceAll(new Dictionary<int, float>());
                 SizeBook.Rules.ResetAll();
+                CaptureBook.ClearAll();
                 HelloedClients.Clear();
                 Welcomed = false;
                 RefusalText = null;

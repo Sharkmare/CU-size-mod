@@ -13,6 +13,7 @@ namespace CasualtiesSize.Core
         RuleShow,
         RuleSet,
         Eat,
+        Pickup,
         Release,
     }
 
@@ -85,6 +86,14 @@ namespace CasualtiesSize.Core
                         return false;
                     }
                     command = new SizeCommand { Verb = SizeVerb.Eat, Target = arguments[1], Secondary = arguments[2] };
+                    return true;
+                case "pickup":
+                    if (arguments.Length < 3)
+                    {
+                        error = "usage: pickup <holder> <target>";
+                        return false;
+                    }
+                    command = new SizeCommand { Verb = SizeVerb.Pickup, Target = arguments[1], Secondary = arguments[2] };
                     return true;
                 case "release":
                     if (arguments.Length < 2)

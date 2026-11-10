@@ -44,6 +44,10 @@ namespace CasualtiesSize
                     return ShowRules(command);
                 case SizeVerb.RuleSet:
                     return SetRule(command, caller, environment);
+                case SizeVerb.Eat:
+                case SizeVerb.Pickup:
+                case SizeVerb.Release:
+                    return CaptureCommands.Execute(command, caller, environment);
                 default:
                     return "not handled here: " + command.Verb;
             }

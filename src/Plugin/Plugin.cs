@@ -37,6 +37,8 @@ namespace CasualtiesSize
             TogetherLoaded = Chainloader.PluginInfos.ContainsKey(TogetherGuid);
             new Harmony(Guid).PatchAll(typeof(Plugin).Assembly);
             gameObject.AddComponent<SizeApplier>();
+            gameObject.AddComponent<StompRunner>();
+            gameObject.AddComponent<CaptureRunner>();
             if (TogetherLoaded) StartTogetherBridge();
             Log.LogInfo(Name + " " + Version + " loaded, Together " + (TogetherLoaded ? "present" : "absent") + ", protocol " + SizeWire.ProtocolVersion);
         }
@@ -93,10 +95,43 @@ namespace CasualtiesSize
             return TogetherBridge.Directory;
         }
 
+        public static bool IsAuthority()
+        {
+            return !Networked() || AskBridgeIsServer();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool AskBridgeIsServer()
+        {
+            return TogetherBridge.IsServer();
+        }
+
+        public static int LocalKey()
+        {
+            return Networked() ? AskBridgeLocalKey() : SizeBook.SingleplayerKey;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int AskBridgeLocalKey()
+        {
+            return TogetherBridge.LocalKey();
+        }
+
+        public static void SendStruggle()
+        {
+            if (Networked()) SendStruggleViaBridge();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void SendStruggleViaBridge()
+        {
+            TogetherBridge.SendStruggle();
+        }
+
         public static string Dispatch(SizeCommand command)
         {
             if (Networked()) return DispatchNetworked(command);
-            if (command.Verb == SizeVerb.Eat || command.Verb == SizeVerb.Release) return "there is no other body to " + (command.Verb == SizeVerb.Eat ? "eat" : "release") + " in singleplayer";
+            if (command.Verb == SizeVerb.Eat || command.Verb == SizeVerb.Pickup || command.Verb == SizeVerb.Release) return "there is no other body to use that on in singleplayer";
             return SizeService.Execute(command, LocalEnvironment.LocalCaller, LocalEnvironment.Instance);
         }
 

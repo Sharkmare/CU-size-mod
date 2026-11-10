@@ -33,6 +33,8 @@ namespace CasualtiesSize
                 arguments => Run(arguments), null, ("string rule", "rule name"), ("float value", "new value")));
             Register(new Command("eat", "A much larger body swallows a smaller one: eat <eater> <target>",
                 arguments => Run(arguments), null, (TargetShortDescription, "who eats"), (TargetShortDescription, "who is eaten")));
+            Register(new Command("pickup", "A larger body picks up a smaller one: pickup <holder> <target>",
+                arguments => Run(arguments), null, (TargetShortDescription, "who lifts"), (TargetShortDescription, "who is lifted")));
             Register(new Command("release", "Lets a held or swallowed body go: release <target>",
                 arguments => Run(arguments), null, (TargetShortDescription, "who is let go")));
         }
