@@ -73,6 +73,7 @@ namespace CasualtiesSize.Tests
             CommandTests.Register(suite);
             WireTests.Register(suite);
             CaptureTests.Register(suite);
+            GateTests.Register(suite);
             return suite.Run();
         }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using CasualtiesSize.Core;
 using HarmonyLib;
@@ -12,35 +13,28 @@ namespace CasualtiesSize
 {
     internal static class TogetherBridge
     {
-        public const string MessagePrefix = "CasualtiesSize.";
-        public const float HelloTimeoutSeconds = 5f;
-        private const float HelloRetrySeconds = 2f;
         private const int MaxTextLength = 64;
+        private const int MaxReplyLength = 400;
 
         public static readonly IBodyDirectory Directory = new TogetherDirectory();
 
-        private static readonly HashSet<ushort> HelloedClients = new HashSet<ushort>();
         private static readonly TogetherEnvironment Environment = new TogetherEnvironment();
+        private static readonly SizeGate Gate = new SizeGate(new NetTransport(), WelcomePayload, HelloPayload());
 
-        public static bool Welcomed;
-        public static float FirstHelloTime = -1f;
-        public static string RefusalText;
-
-        private static float lastHelloTime = -100f;
         private static bool wasRunning;
         private static bool fallbackLogged;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void Start()
         {
-            Multiplayer.RegisterCustomServerReceiver(MessagePrefix + "Hello", HostReceiveHello);
-            Multiplayer.RegisterCustomServerReceiver(MessagePrefix + "Request", HostReceiveRequest);
-            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Welcome", ClientReceiveWelcome);
-            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Sizes", ClientReceiveSizes);
-            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Rules", ClientReceiveRules);
-            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Reply", ClientReceiveReply);
-            Multiplayer.RegisterCustomServerReceiver(MessagePrefix + "Struggle", HostReceiveStruggle);
-            Multiplayer.RegisterCustomClientReceiver(MessagePrefix + "Captures", ClientReceiveCaptures);
+            Register("Hello", true, HostReceiveHello);
+            Register("Request", true, HostReceiveRequest);
+            Register("Struggle", true, HostReceiveStruggle);
+            Register("Welcome", false, ClientReceiveWelcome);
+            Register("Sizes", false, ClientReceiveSizes);
+            Register("Rules", false, ClientReceiveRules);
+            Register("Reply", false, ClientReceiveReply);
+            Register("Captures", false, ClientReceiveCaptures);
             CaptureBook.Broadcast = keys => BroadcastCaptures();
             CaptureBook.HealthChanged = QueueHealthSync;
             ScavPlayer.OnPlayerLeft += HostPlayerLeft;
@@ -48,6 +42,13 @@ namespace CasualtiesSize
             PvpFragilityPatch.Apply(harmony);
             PiggybackWeightPatch.Apply(harmony);
             Plugin.Instance.gameObject.AddComponent<BridgeTicker>();
+        }
+
+        private static void Register(string name, bool toHost, Action<ScavPlayer, byte[]> handler)
+        {
+            string full = SizeGate.Prefix + name;
+            if (toHost) Multiplayer.RegisterCustomServerReceiver(full, (sender, reader) => handler(sender, reader.GetBytesWithLength()));
+            else Multiplayer.RegisterCustomClientReceiver(full, reader => handler(null, reader.GetBytesWithLength()));
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -71,17 +72,47 @@ namespace CasualtiesSize
                 ICaller caller = new PlayerCaller(ScavPlayer.LocalPlayer, true);
                 return SizeService.Execute(command, caller, Environment);
             }
-            if (RefusalText != null) return RefusalText;
-            if (!Welcomed) return "waiting for the host to answer, or the host does not run CasualtiesSize";
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Request");
-            writer.Put((byte)command.Verb);
-            writer.Put(Truncate(command.Target));
-            writer.Put(command.Factor);
-            writer.Put(Truncate(command.RuleName));
-            writer.Put(Truncate(command.RuleValue));
-            writer.Put(Truncate(command.Secondary));
-            Net.Client_Send(DeliveryMethod.ReliableOrdered, writer);
+            if (Gate.Host != PeerState.Confirmed) return Gate.RefusalText();
+            Gate.SendToHost("Request", Pack(writer =>
+            {
+                writer.Write((byte)command.Verb);
+                writer.Write(Truncate(command.Target));
+                writer.Write(command.Factor);
+                writer.Write(Truncate(command.RuleName));
+                writer.Write(Truncate(command.RuleValue));
+                writer.Write(Truncate(command.Secondary));
+            }));
             return null;
+        }
+
+        private static byte[] HelloPayload()
+        {
+            return Pack(writer => writer.Write(SizeWire.ProtocolVersion));
+        }
+
+        private static byte[] WelcomePayload()
+        {
+            return Pack(writer =>
+            {
+                writer.Write(SizeWire.ProtocolVersion);
+                byte[] rules = SizeWire.EncodeRules(SizeBook.Rules.Snapshot());
+                writer.Write(rules.Length);
+                writer.Write(rules);
+                byte[] sizes = SizeWire.EncodeSizes(SizeBook.Copy());
+                writer.Write(sizes.Length);
+                writer.Write(sizes);
+            });
+        }
+
+        private static byte[] Pack(Action<BinaryWriter> fill)
+        {
+            using (MemoryStream stream = new MemoryStream())
+            using (BinaryWriter writer = new BinaryWriter(stream))
+            {
+                fill(writer);
+                writer.Flush();
+                return stream.ToArray();
+            }
         }
 
         private static string Truncate(string text)
@@ -90,101 +121,122 @@ namespace CasualtiesSize
             return text.Length <= MaxTextLength ? text : text.Substring(0, MaxTextLength);
         }
 
-        private static void HostReceiveHello(ScavPlayer sender, NetDataReader reader)
-        {
-            if (!Net.IsServer) return;
-            ushort clientVersion = reader.GetUShort();
-            if (!SizeWire.Compatible(SizeWire.ProtocolVersion, clientVersion))
-            {
-                Plugin.Debug("hello from " + sender.playerName + " refused, protocol " + clientVersion);
-                SendReply(sender, "CasualtiesSize protocol " + clientVersion + " does not match the host's " + SizeWire.ProtocolVersion);
-                return;
-            }
-            HelloedClients.Add((ushort)sender.playerId);
-            BroadcastCaptures();
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Welcome");
-            writer.Put(SizeWire.ProtocolVersion);
-            writer.PutBytesWithLength(SizeWire.EncodeRules(SizeBook.Rules.Snapshot()));
-            writer.PutBytesWithLength(SizeWire.EncodeSizes(SizeBook.Copy()));
-            Net.Server_SendTo(DeliveryMethod.ReliableOrdered, writer, sender.playerId);
-            Plugin.Debug("welcomed " + sender.playerName);
-        }
-
-        private static void HostReceiveRequest(ScavPlayer sender, NetDataReader reader)
-        {
-            if (!Net.IsServer) return;
-            byte verbByte = reader.GetByte();
-            if (!Enum.IsDefined(typeof(SizeVerb), (int)verbByte)) return;
-            SizeCommand command = new SizeCommand
-            {
-                Verb = (SizeVerb)verbByte,
-                Target = reader.GetString(MaxTextLength),
-                Factor = reader.GetFloat(),
-                RuleName = Blank(reader.GetString(MaxTextLength)),
-                RuleValue = Blank(reader.GetString(MaxTextLength)),
-                Secondary = Blank(reader.GetString(MaxTextLength)),
-            };
-            if (float.IsNaN(command.Factor) || float.IsInfinity(command.Factor)) return;
-            string reply = SizeService.Execute(command, new PlayerCaller(sender, false), Environment);
-            SendReply(sender, reply);
-        }
-
         private static string Blank(string text)
         {
             return string.IsNullOrEmpty(text) ? null : text;
         }
 
+        private static void HostReceiveHello(ScavPlayer sender, byte[] payload)
+        {
+            if (!Net.IsServer) return;
+            ushort clientVersion;
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(payload))) clientVersion = reader.ReadUInt16();
+            }
+            catch (Exception)
+            {
+                return;
+            }
+            bool compatible = SizeWire.Compatible(SizeWire.ProtocolVersion, clientVersion);
+            Gate.OnHello((ushort)sender.playerId, compatible);
+            Plugin.Debug("hello from " + sender.playerName + ", protocol " + clientVersion + (compatible ? " welcomed" : " refused"));
+            if (compatible) BroadcastCaptures();
+        }
+
+        private static void HostReceiveRequest(ScavPlayer sender, byte[] payload)
+        {
+            if (!Net.IsServer || Gate.StateOf((ushort)sender.playerId) != PeerState.Confirmed) return;
+            SizeCommand command;
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(payload)))
+                {
+                    byte verbByte = reader.ReadByte();
+                    if (!Enum.IsDefined(typeof(SizeVerb), (int)verbByte)) return;
+                    command = new SizeCommand
+                    {
+                        Verb = (SizeVerb)verbByte,
+                        Target = reader.ReadString(),
+                        Factor = reader.ReadSingle(),
+                        RuleName = Blank(reader.ReadString()),
+                        RuleValue = Blank(reader.ReadString()),
+                        Secondary = Blank(reader.ReadString()),
+                    };
+                }
+            }
+            catch (Exception)
+            {
+                return;
+            }
+            if (float.IsNaN(command.Factor) || float.IsInfinity(command.Factor)) return;
+            string reply = SizeService.Execute(command, new PlayerCaller(sender, false), Environment);
+            SendReply(sender, reply);
+        }
+
         private static void SendReply(ScavPlayer target, string text)
         {
             if (string.IsNullOrEmpty(text) || target == null || target.IsLocal) return;
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Reply");
-            writer.Put(Truncate(text.Length > 400 ? text.Substring(0, 400) : text, 400));
-            Net.Server_SendTo(DeliveryMethod.ReliableOrdered, writer, target.playerId);
+            if (text.Length > MaxReplyLength) text = text.Substring(0, MaxReplyLength);
+            Gate.SendToPlayer((ushort)target.playerId, "Reply", Pack(writer => writer.Write(text)));
         }
 
-        private static string Truncate(string text, int limit)
+        private static void ClientReceiveWelcome(ScavPlayer unused, byte[] payload)
         {
-            return text.Length <= limit ? text : text.Substring(0, limit);
-        }
-
-        private static void ClientReceiveWelcome(NetDataReader reader)
-        {
-            ushort hostVersion = reader.GetUShort();
-            byte[] rulesBytes = reader.GetBytesWithLength();
-            byte[] sizesBytes = reader.GetBytesWithLength();
-            if (!SizeWire.Compatible(hostVersion, SizeWire.ProtocolVersion))
+            if (Net.IsServer || Gate.Host != PeerState.Unknown) return;
+            try
             {
-                RefusalText = "this host runs CasualtiesSize protocol " + hostVersion + ", yours is " + SizeWire.ProtocolVersion + ", size is off for you";
-                return;
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(payload)))
+                {
+                    ushort hostVersion = reader.ReadUInt16();
+                    bool compatible = SizeWire.Compatible(hostVersion, SizeWire.ProtocolVersion);
+                    if (!compatible)
+                    {
+                        Gate.OnWelcome(false);
+                        Plugin.Log.LogInfo("This host runs CasualtiesSize protocol " + hostVersion + ", yours is " + SizeWire.ProtocolVersion + ", so sizes are off for you.");
+                        return;
+                    }
+                    byte[] rulesBytes = reader.ReadBytes(reader.ReadInt32());
+                    byte[] sizesBytes = reader.ReadBytes(reader.ReadInt32());
+                    Dictionary<string, float> rules;
+                    Dictionary<int, float> sizes;
+                    if (!SizeWire.TryDecodeRules(rulesBytes, out rules)) return;
+                    SizeBook.Rules.Load(rules);
+                    if (!SizeWire.TryDecodeSizes(sizesBytes, SizeBook.Rules, out sizes)) return;
+                    SizeBook.ReplaceAll(sizes);
+                    Gate.OnWelcome(true);
+                    Plugin.Debug("welcome received, " + sizes.Count + " sizes");
+                }
             }
-            Dictionary<string, float> rules;
+            catch (Exception)
+            {
+            }
+        }
+
+        private static void ClientReceiveSizes(ScavPlayer unused, byte[] payload)
+        {
+            if (Net.IsServer || Gate.Host != PeerState.Confirmed) return;
             Dictionary<int, float> sizes;
-            if (!SizeWire.TryDecodeRules(rulesBytes, out rules)) return;
-            SizeBook.Rules.Load(rules);
-            if (!SizeWire.TryDecodeSizes(sizesBytes, SizeBook.Rules, out sizes)) return;
-            SizeBook.ReplaceAll(sizes);
-            Welcomed = true;
-            RefusalText = null;
-            Plugin.Debug("welcome received, " + sizes.Count + " sizes");
+            if (SizeWire.TryDecodeSizes(payload, SizeBook.Rules, out sizes)) SizeBook.ReplaceAll(sizes);
         }
 
-        private static void ClientReceiveSizes(NetDataReader reader)
+        private static void ClientReceiveRules(ScavPlayer unused, byte[] payload)
         {
-            if (Net.IsServer) return;
-            Dictionary<int, float> sizes;
-            if (SizeWire.TryDecodeSizes(reader.GetBytesWithLength(), SizeBook.Rules, out sizes)) SizeBook.ReplaceAll(sizes);
-        }
-
-        private static void ClientReceiveRules(NetDataReader reader)
-        {
-            if (Net.IsServer) return;
+            if (Net.IsServer || Gate.Host != PeerState.Confirmed) return;
             Dictionary<string, float> rules;
-            if (SizeWire.TryDecodeRules(reader.GetBytesWithLength(), out rules)) SizeBook.Rules.Load(rules);
+            if (SizeWire.TryDecodeRules(payload, out rules)) SizeBook.Rules.Load(rules);
         }
 
-        private static void ClientReceiveReply(NetDataReader reader)
+        private static void ClientReceiveReply(ScavPlayer unused, byte[] payload)
         {
-            ConsoleOutput.Write(reader.GetString(400));
+            if (Net.IsServer || Gate.Host != PeerState.Confirmed) return;
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(payload))) ConsoleOutput.Write(reader.ReadString());
+            }
+            catch (Exception)
+            {
+            }
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -202,45 +254,55 @@ namespace CasualtiesSize
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void SendStruggle()
         {
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Struggle");
-            Net.Client_Send(DeliveryMethod.ReliableOrdered, writer);
+            Gate.SendToHost("Struggle", new byte[0]);
         }
 
-        private static void HostReceiveStruggle(ScavPlayer sender, NetDataReader reader)
+        private static void HostReceiveStruggle(ScavPlayer sender, byte[] payload)
         {
-            if (!Net.IsServer) return;
+            if (!Net.IsServer || Gate.StateOf((ushort)sender.playerId) != PeerState.Confirmed) return;
             CaptureEntry entry;
             if (CaptureBook.ByHeld.TryGetValue(sender.playerId, out entry)) entry.Tracker.Struggle();
         }
 
         public static void BroadcastCaptures()
         {
-            if (!Net.IsServer || HelloedClients.Count == 0) return;
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Captures");
+            if (!Net.IsServer) return;
             List<KeyValuePair<int, KeyValuePair<int, byte>>> table = CaptureBook.ToWire();
-            writer.Put((ushort)table.Count);
-            foreach (KeyValuePair<int, KeyValuePair<int, byte>> row in table)
+            Gate.Broadcast("Captures", Pack(writer =>
             {
-                writer.Put(row.Key);
-                writer.Put(row.Value.Key);
-                writer.Put(row.Value.Value);
-            }
-            Net.Server_SendToClients(DeliveryMethod.ReliableOrdered, writer, HelloedIds());
+                writer.Write((ushort)table.Count);
+                foreach (KeyValuePair<int, KeyValuePair<int, byte>> row in table)
+                {
+                    writer.Write(row.Key);
+                    writer.Write(row.Value.Key);
+                    writer.Write(row.Value.Value);
+                }
+            }));
         }
 
-        private static void ClientReceiveCaptures(NetDataReader reader)
+        private static void ClientReceiveCaptures(ScavPlayer unused, byte[] payload)
         {
-            if (Net.IsServer) return;
-            int count = reader.GetUShort();
-            if (count > 256) return;
+            if (Net.IsServer || Gate.Host != PeerState.Confirmed) return;
             List<KeyValuePair<int, KeyValuePair<int, byte>>> table = new List<KeyValuePair<int, KeyValuePair<int, byte>>>();
-            for (int i = 0; i < count; i++)
+            try
             {
-                int held = reader.GetInt();
-                int holder = reader.GetInt();
-                byte mode = reader.GetByte();
-                if (mode > 1) return;
-                table.Add(new KeyValuePair<int, KeyValuePair<int, byte>>(held, new KeyValuePair<int, byte>(holder, mode)));
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(payload)))
+                {
+                    int count = reader.ReadUInt16();
+                    if (count > 256) return;
+                    for (int i = 0; i < count; i++)
+                    {
+                        int held = reader.ReadInt32();
+                        int holder = reader.ReadInt32();
+                        byte mode = reader.ReadByte();
+                        if (mode > 1) return;
+                        table.Add(new KeyValuePair<int, KeyValuePair<int, byte>>(held, new KeyValuePair<int, byte>(holder, mode)));
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return;
             }
             CaptureBook.ReplaceFromWire(table);
         }
@@ -256,31 +318,20 @@ namespace CasualtiesSize
 
         public static void BroadcastSizes()
         {
-            if (!Net.IsServer || HelloedClients.Count == 0) return;
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Sizes");
-            writer.PutBytesWithLength(SizeWire.EncodeSizes(SizeBook.Copy()));
-            Net.Server_SendToClients(DeliveryMethod.ReliableOrdered, writer, HelloedIds());
+            if (!Net.IsServer) return;
+            Gate.Broadcast("Sizes", SizeWire.EncodeSizes(SizeBook.Copy()));
         }
 
         public static void BroadcastRules()
         {
-            if (!Net.IsServer || HelloedClients.Count == 0) return;
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Rules");
-            writer.PutBytesWithLength(SizeWire.EncodeRules(SizeBook.Rules.Snapshot()));
-            Net.Server_SendToClients(DeliveryMethod.ReliableOrdered, writer, HelloedIds());
-        }
-
-        private static List<knetid> HelloedIds()
-        {
-            List<knetid> ids = new List<knetid>();
-            foreach (ushort id in HelloedClients) ids.Add(new knetid(id));
-            return ids;
+            if (!Net.IsServer) return;
+            Gate.Broadcast("Rules", SizeWire.EncodeRules(SizeBook.Rules.Snapshot()));
         }
 
         private static void HostPlayerLeft(ScavPlayer player)
         {
             if (!Net.IsServer) return;
-            HelloedClients.Remove((ushort)player.playerId);
+            Gate.OnPlayerLeft((ushort)player.playerId);
             CaptureBook.End(player.playerId);
             foreach (CaptureEntry held in new List<CaptureEntry>(CaptureBook.ByHeld.Values))
                 if (held.HolderKey == player.playerId) CaptureBook.End(held.HeldKey);
@@ -300,26 +351,36 @@ namespace CasualtiesSize
                 SizeBook.ReplaceAll(new Dictionary<int, float>());
                 SizeBook.Rules.ResetAll();
                 CaptureBook.ClearAll();
-                HelloedClients.Clear();
-                Welcomed = false;
-                RefusalText = null;
-                FirstHelloTime = -1f;
+                Gate.Reset();
                 fallbackLogged = false;
-                lastHelloTime = -100f;
             }
-            if (!running || Net.IsServer || Welcomed || RefusalText != null) return;
-            if (!Net.IsConnected || ScavPlayer.LocalPlayer == null) return;
-            if (FirstHelloTime >= 0f && !fallbackLogged && Time.unscaledTime - FirstHelloTime > HelloTimeoutSeconds)
+            if (!running || Net.IsServer || !Net.IsConnected || ScavPlayer.LocalPlayer == null) return;
+            Gate.ClientTick(Time.unscaledTime);
+            if (Gate.Host == PeerState.NotOurs && !fallbackLogged)
             {
                 fallbackLogged = true;
                 Plugin.Log.LogInfo("The host did not answer, so sizes are off in this game unless the host has CasualtiesSize.");
             }
-            if (Time.unscaledTime - lastHelloTime < HelloRetrySeconds) return;
-            lastHelloTime = Time.unscaledTime;
-            if (FirstHelloTime < 0f) FirstHelloTime = Time.unscaledTime;
-            NetDataWriter writer = Multiplayer.CreateNamedWriter(MessagePrefix + "Hello");
-            writer.Put(SizeWire.ProtocolVersion);
+        }
+    }
+
+    internal sealed class NetTransport : ISizeTransport
+    {
+        public bool IsNetworkRunning { get { return Net.IsRunning; } }
+        public bool IsHost { get { return Net.IsServer; } }
+
+        public void SendToHost(string name, byte[] payload)
+        {
+            NetDataWriter writer = Multiplayer.CreateNamedWriter(name);
+            writer.PutBytesWithLength(payload);
             Net.Client_Send(DeliveryMethod.ReliableOrdered, writer);
+        }
+
+        public void SendToPlayer(ushort playerId, string name, byte[] payload)
+        {
+            NetDataWriter writer = Multiplayer.CreateNamedWriter(name);
+            writer.PutBytesWithLength(payload);
+            Net.Server_SendTo(DeliveryMethod.ReliableOrdered, writer, new knetid(playerId));
         }
     }
 

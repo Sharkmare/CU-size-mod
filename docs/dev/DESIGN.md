@@ -114,6 +114,8 @@ Registration, read from source:
 - Entity versus message: `SyncBody` is a fixed LiteEntitySystem class that Together registers; nothing outside can add a field to it, and the size must exist before and without a body (a player who has not spawned yet, a respawn). So the size table is a custom message table: the full table is sent on `Welcome` and again on every change (a handful of ints and floats), reliable ordered, host to clients that said `Hello`.
 - Late joiners: Together has no join hook that a plugin can use for a pull, but `ScavPlayer.OnPlayerJoined` is not needed: the joining client sends `Hello` once it has a local player and connection, retried every 2 s, and the host answers with `Welcome`. No Together change is required, so nothing was asked of cu-mp-robust.
 
+Governing rule: nothing of ours is sent to a peer until that peer has proved it is ours. `SizeGate` (`src/Core/SizeGate.cs`, tested offline with a fake transport) implements it: a client sends only `Hello` (every 2 s, stopping after 5 s, after which the host counts as one without the plugin and every later send is dropped); a host sends a peer nothing until that peer's compatible `Hello` arrived and answers it with `Welcome` first; broadcasts reach confirmed peers only; a protocol mismatch gets no reply at all and is never sent to; `OnPlayerLeft` forgets a peer because ids are reused. Every message body is one length-prefixed byte array, so the gate sees plain bytes and the Together types stay in the adapter.
+
 Messages (all named `CasualtiesSize.<name>`):
 
 | Name | Direction | Payload |
