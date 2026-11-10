@@ -1,0 +1,72 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace CasualtiesSize
+{
+    public struct BodyHandle
+    {
+        public int Key;
+        public Body Body;
+        public bool IsLocal;
+    }
+
+    public interface IBodyDirectory
+    {
+        IEnumerable<BodyHandle> Bodies();
+    }
+
+    public sealed class SingleplayerDirectory : IBodyDirectory
+    {
+        public static readonly SingleplayerDirectory Instance = new SingleplayerDirectory();
+
+        public IEnumerable<BodyHandle> Bodies()
+        {
+            if (PlayerCamera.main != null && PlayerCamera.main.body != null)
+                yield return new BodyHandle { Key = SizeBook.SingleplayerKey, Body = PlayerCamera.main.body, IsLocal = true };
+        }
+    }
+
+    public sealed class SizeApplier : MonoBehaviour
+    {
+        private const float ScanIntervalSeconds = 0.25f;
+
+        private float nextScan;
+        private float cameraBaseSize;
+        private bool cameraBaseKnown;
+        private Camera cameraHoldingBase;
+
+        private SizedBody localSized;
+
+        private void Update()
+        {
+            if (localSized != null) FollowCamera(localSized);
+            if (Time.unscaledTime < nextScan) return;
+            nextScan = Time.unscaledTime + ScanIntervalSeconds;
+            localSized = null;
+            foreach (BodyHandle handle in Plugin.CurrentDirectory().Bodies())
+            {
+                if (handle.Body == null) continue;
+                float target = SizeBook.Get(handle.Key);
+                SizedBody sized = handle.Body.GetComponent<SizedBody>();
+                if (sized == null && target == 1f) continue;
+                if (sized == null) sized = SizedBody.For(handle.Body);
+                sized.SetTarget(target);
+                if (handle.IsLocal) localSized = sized;
+            }
+        }
+
+        private void FollowCamera(SizedBody sized)
+        {
+            Camera camera = Camera.main;
+            if (camera == null || !camera.orthographic) return;
+            if (!cameraBaseKnown || cameraHoldingBase != camera)
+            {
+                cameraBaseSize = camera.orthographicSize;
+                cameraHoldingBase = camera;
+                cameraBaseKnown = true;
+            }
+            float zoom = Core.SizeMath.CameraZoomMult(SizeBook.Rules, sized.Current);
+            camera.orthographicSize = cameraBaseSize * zoom;
+        }
+    }
+}
