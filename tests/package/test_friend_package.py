@@ -58,6 +58,16 @@ class FriendPackageTests(unittest.TestCase):
         package.build(self.dll, second, "9.9.9")
         self.assertEqual(package.file_md5(self.zip_path), package.file_md5(second))
 
+    def test_rebuilding_over_a_zip_keeps_the_previous_one(self):
+        target = os.path.join(self.workdir.name, "keep", "pkg.zip")
+        package.build(self.dll, target, "1.0.0")
+        first_md5 = package.file_md5(target)
+        package.build(self.dll, target, "2.0.0")
+        kept = os.path.join(os.path.dirname(target), "pkg.previous-%s.zip" % first_md5[:8])
+        self.assertTrue(os.path.isfile(kept))
+        self.assertEqual(first_md5, package.file_md5(kept))
+        self.assertNotEqual(first_md5, package.file_md5(target))
+
     def test_missing_dll_is_refused(self):
         with self.assertRaises(FileNotFoundError):
             package.build(os.path.join(self.workdir.name, "none.dll"), os.path.join(self.workdir.name, "x.zip"), "1")

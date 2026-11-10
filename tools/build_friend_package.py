@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
 import sys
 import zipfile
 
@@ -57,10 +58,21 @@ def file_md5(path):
         return hashlib.md5(handle.read()).hexdigest()
 
 
+def keep_previous(output_path):
+    if not os.path.isfile(output_path):
+        return None
+    stem, extension = os.path.splitext(output_path)
+    kept = "%s.previous-%s%s" % (stem, file_md5(output_path)[:8], extension)
+    if not os.path.exists(kept):
+        shutil.copy2(output_path, kept)
+    return kept
+
+
 def build(dll_path, output_path, version):
     if not os.path.isfile(dll_path):
         raise FileNotFoundError("build first: dotnet build -c Release (missing %s)" % dll_path)
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    keep_previous(output_path)
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for entry, content in ((INSTALL_ENTRY, INSTALL_TEMPLATE.format(version=version, together=TOGETHER_REQUIREMENT).replace("\n", "\r\n").encode("utf-8")),
                                (PLUGIN_ENTRY, open(dll_path, "rb").read())):
