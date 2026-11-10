@@ -76,6 +76,7 @@ All strengths are named numbers in `SizeRules` with the defaults below; the host
 | Fall gravity | `size^FallGravityExponent` on the Body and limb `gravityScale`: small bodies gain speed more slowly | 0.5 |
 | Dig speed | `Clamp(size^DigExponent, DigMultMin, DigMultMax)` on `atk.structuralDamage` | 1.0, clamp 0.25..8 |
 | Reach | `atk.distance * size^ReachExponent` | 0.5 |
+| Weight of a carried player (Together piggyback, `NetBody.GetRealFullEncumberanceOfBody`) | times `size^CarryExponent` of the carried body, so with the carrier's own capacity above the load follows `(carried / carrier)^CarryExponent` | 2.0 |
 | Carry capacity | `maxEncumberance * size^CarryExponent` | 2.0 |
 | Stomp | actor foot limb moving down at `>= StompMinSpeed` relative to the other body, foot above the other's torso top, `r >= StompRatio`; force passed to `ImpactDamage` = `Min(relSpeed, StompSpeedCap) * StompForcePerRatio * r`, knockdown via `Ragdoll()`, pair cooldown `StompCooldown` | ratio 1.6, min speed 4, force 0.9 per ratio, cap 20, cooldown 0.6 s |
 | Pick up | `r >= PickupRatio` | 1.5 |

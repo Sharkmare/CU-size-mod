@@ -45,6 +45,7 @@ namespace CasualtiesSize
             ScavPlayer.OnPlayerLeft += HostPlayerLeft;
             Harmony harmony = new Harmony(Plugin.Guid + ".together");
             PvpFragilityPatch.Apply(harmony);
+            PiggybackWeightPatch.Apply(harmony);
             Plugin.Instance.gameObject.AddComponent<BridgeTicker>();
         }
 
@@ -419,6 +420,30 @@ namespace CasualtiesSize
             float victimSize = SizedBody.SizeOf(target.body);
             if (Mathf.Approximately(victimSize, 1f)) return;
             armstrength *= SizeMath.VictimFragilityMult(SizeBook.Rules, victimSize);
+        }
+    }
+}
+
+namespace CasualtiesSize
+{
+    internal static class PiggybackWeightPatch
+    {
+        public static void Apply(Harmony harmony)
+        {
+            var target = AccessTools.Method(typeof(NetBody), nameof(NetBody.GetRealFullEncumberanceOfBody));
+            if (target == null)
+            {
+                Plugin.Log.LogWarning("NetBody.GetRealFullEncumberanceOfBody not found, a carried player keeps full weight");
+                return;
+            }
+            harmony.Patch(target, postfix: new HarmonyMethod(typeof(PiggybackWeightPatch), nameof(Postfix)));
+        }
+
+        private static void Postfix(NetBody __instance, ref float __result)
+        {
+            float carriedSize = SizedBody.SizeOf(__instance.body);
+            if (Mathf.Approximately(carriedSize, 1f)) return;
+            __result *= SizeMath.CarryMult(SizeBook.Rules, carriedSize);
         }
     }
 }
