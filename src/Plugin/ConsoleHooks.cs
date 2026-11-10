@@ -39,11 +39,17 @@ namespace CasualtiesSize
                 arguments => Run(arguments), null, (TargetShortDescription, "who is let go")));
         }
 
+        private static readonly List<Command> Registered = new List<Command>();
+
         private static void Register(Command command)
         {
             ConsoleScript.Commands.RemoveAll(existing => existing.name == command.name);
             ConsoleScript.Commands.Add(command);
+            Registered.Add(command);
+            if (Registered.Count == RegisteredCommandCount && Plugin.TogetherLoaded) Plugin.RegisterCommandsWithTogether(Registered);
         }
+
+        private const int RegisteredCommandCount = 6;
 
         private static void Run(string[] arguments)
         {

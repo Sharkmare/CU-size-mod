@@ -49,6 +49,13 @@ namespace CasualtiesSize
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void RegisterCommands(List<Command> commands)
+        {
+            foreach (Command command in commands) Con.RegisterCommand_LocalOnly(command);
+            Con.UpdatePlayerListAutocomplete();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public static bool NetworkRunning()
         {
             return Net.IsRunning;

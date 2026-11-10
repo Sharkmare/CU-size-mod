@@ -95,6 +95,19 @@ namespace CasualtiesSize
             return TogetherBridge.Directory;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void RegisterCommandsWithTogether(System.Collections.Generic.List<Command> commands)
+        {
+            try
+            {
+                TogetherBridge.RegisterCommands(commands);
+            }
+            catch (Exception exception)
+            {
+                Log.LogWarning("could not register commands with Together: " + exception.Message);
+            }
+        }
+
         public static bool IsAuthority()
         {
             return !Networked() || AskBridgeIsServer();

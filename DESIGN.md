@@ -103,28 +103,39 @@ Target grammar is Together's, reused: `@m @a @o @r @r:N @c`, `id:N`, `body:N`, `
 
 ## Multiplayer protocol
 
-Named messages, all prefixed `CasualtiesSize.`:
+Everything goes through Together; the plugin opens no socket.
+
+Registration, read from source:
+
+- Messages: `Multiplayer.RegisterCustomServerReceiver(name, Action<ScavPlayer, NetDataReader>)` and `RegisterCustomClientReceiver(name, Action<NetDataReader>)` (`ScavMultiplayer.cs:2082`, `2091`), writer from `Multiplayer.CreateNamedWriter(name)`, sent with `Net.Client_Send` (client to host), `Net.Server_SendTo` (host to one) and `Net.Server_SendToClients` (host to a list). Together's own `FacePause`, `CustomCommand` use the same path. Receivers run inside try/catch in Together (`ScavMultiplayer.cs:2115-2140`) and an unknown hash is dropped.
+- Commands: `Con.RegisterCommand_LocalOnly(command)` for every command, so they appear in `help`, get Together's player autofill (`Con.UpdatePlayerListAutocomplete`) and are **not** forwarded by admin mode (`localonly_commands`, `ConsoleCommands.cs:2792`). Local-only is deliberate: the command runs on the typing machine and sends its own `Request`, which is what lets anyone size anyone without being an admin. `RegisterCommandModern` is not used because it indexes every declared argument and so cannot express optional arguments (`sizes`, `sizerule`). With no Together the same `Command` objects are added to `ConsoleScript.Commands` directly.
+- Entity versus message: `SyncBody` is a fixed LiteEntitySystem class that Together registers; nothing outside can add a field to it, and the size must exist before and without a body (a player who has not spawned yet, a respawn). So the size table is a custom message table: the full table is sent on `Welcome` and again on every change (a handful of ints and floats), reliable ordered, host to clients that said `Hello`.
+- Late joiners: Together has no join hook that a plugin can use for a pull, but `ScavPlayer.OnPlayerJoined` is not needed: the joining client sends `Hello` once it has a local player and connection, retried every 2 s, and the host answers with `Welcome`. No Together change is required, so nothing was asked of cu-mp-robust.
+
+Messages (all named `CasualtiesSize.<name>`):
 
 | Name | Direction | Payload |
 |---|---|---|
 | `Hello` | client to host | protocol version (ushort) |
-| `Welcome` | host to that client | protocol version, rules blob, full size table |
-| `Request` | client to host | verb, target string, argument string |
-| `Sizes` | host to all hello'd clients | player id, size, flags (one entry per change) |
-| `Rules` | host to all hello'd clients | rules blob |
-| `Capture` | host to all hello'd clients | holder id, held id, mode, state |
-| `Struggle` | client to host | held body presses escape |
-| `Reply` | host to requester | console text |
+| `Welcome` | host to that client | protocol version, rules blob, size table blob |
+| `Request` | client to host | verb byte, target, factor, rule name, rule value, secondary target (strings at most 64 chars) |
+| `Sizes` | host to hello'd clients | size table blob (int key, float size, clamped on arrival) |
+| `Rules` | host to hello'd clients | rules blob (name, float) |
+| `Captures` | host to hello'd clients | count, then held key, holder key, mode |
+| `Struggle` | client to host | none (sender is the held body) |
+| `Reply` | host to requester | console text, at most 400 chars |
 
-The host is authoritative: `Request` is checked against `SizePermission`, resolved with `GetPlayersForCommand`, applied to the host `SizeBook`, then broadcast. A late joiner sends `Hello` when its local player exists; the host answers with `Welcome` holding the whole table. `ScavPlayer.OnPlayerJoined` on the host only logs; the snapshot is pulled by `Hello`, so a player who joins without the plugin simply never asks.
+The host is authoritative: a `Request` is checked against `SizePermission`, targets resolved with `Con.GetPlayersForCommand(spec, sender, false, true)` so `@m` and `@c` refer to the sender, applied to the host `SizeBook`, then broadcast. The size table and rule table are cleared whenever the network starts or stops, so singleplayer keys never leak into a session.
 
-Mismatched presence (all defined, all tested in the pair rig):
+Together's own mod-list check, read from source: the join packet carries the BepInEx plugin GUIDs of the player (Together and its updater removed, `ScavMultiplayer.GetBepinPlugins`). The host rejects a mismatching player with "This server requires different set of mods" **only when** `SERVER_TOGGLE_ENFORCE_MODLIST` is on (default off, toggle in the host menu; `ScavMultiplayer.cs:1259`); the server browser also greys such a lobby (`enforcemodlist_locked`, `SteamworksNet.cs:811`). Policy:
 
-- Client without the plugin: never sends `Hello`; the host never sends it anything; Together drops any stray packet silently; sizes it cannot see only change what it sees on other bodies through synced positions (limb positions arrive in world space, so a big body looks like its limbs spread, not scaled, on that client). It is not crashed and it does not crash the host.
-- Host without the plugin: a client's `Hello` is dropped; after `HelloTimeoutSeconds` (5) the client marks `multiplayer: host has no CasualtiesSize` and `size` replies with that text; it changes nothing locally in a networked game so there is no divergence.
-- Protocol version mismatch: `Welcome` carries the host version; a client with a different major refuses to apply anything and says so in the console.
+- Both sides must run the plugin for size to work. This is documented in the README.
+- Default (enforcement off): a client without the plugin joins and plays normally; it is never sent a size message; it sees other bodies at normal size because the sync is positions in world space, and its own body is sized only on hosts' machines and clients that have the plugin. Nothing crashes on either side.
+- Enforcement on: Together refuses the join, which is the strict form of the same policy.
+- Host without the plugin: a client's `Hello` goes unanswered; `size` replies "waiting for the host to answer, or the host does not run CasualtiesSize" and changes nothing locally.
+- Protocol mismatch: `Welcome` carries the host version; a different version makes the client refuse and print why.
 
-**Unverified until the pair rig runs:** that Together drops unknown custom hashes without an exception on a stock (plugin-less) peer. Source says so (`ScavMultiplayer.cs:2115-2140`: a missing hash is simply not found); the pair test with a client copy that has the plugin removed proves it.
+Proofs queued for the pair rig (none run yet, see README): host sizes self and the client sees it; client sizes the host; reset; permission rule; `sizes` listing; late join by `disconnect` then `connect`; a client copy without the plugin joins, is not crashed, and is not changed. Not testable without the host menu: enforcement on (toggle is a GUI control with no launch flag).
 
 ## Pick up and eat
 

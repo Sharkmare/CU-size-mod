@@ -127,6 +127,19 @@ class ReplicationTests(SizePairCase):
         self.host.console("size @a reset")
 
 
+class LateJoinTests(SizePairCase):
+
+    def test_client_that_reconnects_receives_the_current_sizes(self):
+        self.client.console("disconnect")
+        time.sleep(3.0)
+        self.host.console("size @m 2.5")
+        time.sleep(1.0)
+        self.client.console("connect " + "127.0.0.1:7790")
+        wait_for_bodies(self.client, 2)
+        rows = self.size_of_everywhere(HOST_BODY, 2.5)
+        self.assertIsNotNone(rows, "reconnected client did not receive the host size")
+
+
 class PluginlessClientTests(SizePairCase):
 
     @classmethod
