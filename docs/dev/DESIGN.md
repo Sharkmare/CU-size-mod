@@ -136,7 +136,7 @@ Together's own mod-list check, read from source: the join packet carries the Bep
 - Both sides must run the plugin for size to work. This is documented in the README.
 - Default (enforcement off): a client without the plugin joins and plays normally; it is never sent a size message; it sees other bodies at normal size because the sync is positions in world space, and its own body is sized only on hosts' machines and clients that have the plugin. Nothing crashes on either side.
 - Enforcement on: Together refuses the join, which is the strict form of the same policy.
-- Host without the plugin: a client's `Hello` goes unanswered; `size` replies "waiting for the host to answer, or the host does not run CasualtiesSize" and changes nothing locally.
+- Host without the plugin: a client's `Hello` goes unanswered. While the answer is pending `size` replies that it is waiting. After the 5 s timeout the client may still size itself (`size @m`, its own id or name, `sizes`), which changes only its own screen; sizing anyone else is refused with a message naming the missing plugin on the host.
 - Protocol mismatch: `Welcome` carries the host version; a different version makes the client refuse and print why.
 
 Proofs queued for the two-instance test (none run yet, see README): host sizes self and the client sees it; client sizes the host; reset; permission rule; `sizes` listing; late join by `disconnect` then `connect`; a client copy without the plugin joins, is not crashed, and is not changed. Not testable without the host menu: enforcement on (toggle is a GUI control with no launch flag).

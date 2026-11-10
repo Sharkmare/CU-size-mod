@@ -72,7 +72,7 @@ namespace CasualtiesSize
                 ICaller caller = new PlayerCaller(ScavPlayer.LocalPlayer, true);
                 return SizeService.Execute(command, caller, Environment);
             }
-            if (Gate.Host != PeerState.Confirmed) return Gate.RefusalText();
+            if (Gate.Host != PeerState.Confirmed) return DispatchWithoutHost(command);
             Gate.SendToHost("Request", Pack(writer =>
             {
                 writer.Write((byte)command.Verb);
@@ -83,6 +83,23 @@ namespace CasualtiesSize
                 writer.Write(Truncate(command.Secondary));
             }));
             return null;
+        }
+
+        private static string DispatchWithoutHost(SizeCommand command)
+        {
+            bool hostAnswered = Gate.Host == PeerState.NotOurs || Gate.Host == PeerState.Incompatible;
+            if (!hostAnswered || ScavPlayer.LocalPlayer == null) return Gate.RefusalText();
+            switch (command.Verb)
+            {
+                case SizeVerb.Set:
+                case SizeVerb.Reset:
+                case SizeVerb.Show:
+                case SizeVerb.List:
+                    ICaller caller = new PlayerCaller(ScavPlayer.LocalPlayer, false);
+                    return SizeService.Execute(command, caller, SelfOnlyEnvironment.Instance);
+                default:
+                    return Gate.RefusalText();
+            }
         }
 
         private static byte[] HelloPayload()
@@ -361,6 +378,41 @@ namespace CasualtiesSize
                 fallbackLogged = true;
                 Plugin.Log.LogInfo("The host did not answer, so sizes are off in this game unless the host has CasualtiesSize.");
             }
+        }
+    }
+
+    internal sealed class SelfOnlyEnvironment : ISizeEnvironment
+    {
+        public static readonly SelfOnlyEnvironment Instance = new SelfOnlyEnvironment();
+
+        public bool ResolveTargets(string spec, ICaller caller, out List<int> keys, out string error)
+        {
+            keys = new List<int>();
+            error = null;
+            ScavPlayer me = ScavPlayer.LocalPlayer;
+            string lowered = spec == null ? string.Empty : spec.ToLowerInvariant();
+            bool isMe = me != null && (lowered == "@m" || lowered == "me" || lowered == "id:" + me.playerId
+                || string.Equals(spec, me.playerName, StringComparison.OrdinalIgnoreCase));
+            if (!isMe)
+            {
+                error = "sizing other players needs the host to run CasualtiesSize. This host does not, so only your own size works.";
+                return false;
+            }
+            keys.Add(me.playerId);
+            return true;
+        }
+
+        public string NameOf(int key)
+        {
+            return "you";
+        }
+
+        public void AfterSizesChanged(List<int> keys)
+        {
+        }
+
+        public void AfterRulesChanged()
+        {
         }
     }
 
