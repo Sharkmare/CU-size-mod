@@ -11,6 +11,7 @@ DEFAULT_OUTPUT = os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesS
 PLUGIN_SOURCE = os.path.join(ROOT, "src", "Plugin", "Plugin.cs")
 PLUGIN_ENTRY = "BepInEx/plugins/CasualtiesSize/CasualtiesSize.dll"
 INSTALL_ENTRY = "INSTALL.txt"
+TOGETHER_REQUIREMENT = "the Together 5.4.0-dune.2 package (CasualtiesTogether-dune.zip)"
 ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 INSTALL_TEMPLATE = """CasualtiesSize {version}
@@ -19,7 +20,7 @@ Lets players change body size in the console, in singleplayer and with the Toget
 
 Needs
 - Casualties: Unknown with BepInEx 5.4.23.5
-- For multiplayer: the Together dune.2 package (CasualtiesTogether-dune.zip)
+- For multiplayer: {together}
 - Every player in the session must have this plugin. A player without it sees no size change.
 
 Install
@@ -37,7 +38,8 @@ Anyone may size anyone by default. The host can restrict it: sizerule SizePermis
 
 Notes
 - Using size turns achievements off until you restart the game.
-- Not tested yet, so avoid in a real session: eat, pickup, release, stomping on other players, and camera zoom.
+- Small bodies fall with less gravity and take less fall damage; a piggybacked player weighs less the smaller they are. These and the camera zoom are new and were only tested offline.
+- Not tested at all, so avoid in a real session: eat, pickup, release and stomping on other players.
 - A size is kept while the session runs and is gone when everyone leaves.
 """
 
@@ -60,7 +62,7 @@ def build(dll_path, output_path, version):
         raise FileNotFoundError("build first: dotnet build -c Release (missing %s)" % dll_path)
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
-        for entry, content in ((INSTALL_ENTRY, INSTALL_TEMPLATE.format(version=version).replace("\n", "\r\n").encode("utf-8")),
+        for entry, content in ((INSTALL_ENTRY, INSTALL_TEMPLATE.format(version=version, together=TOGETHER_REQUIREMENT).replace("\n", "\r\n").encode("utf-8")),
                                (PLUGIN_ENTRY, open(dll_path, "rb").read())):
             info = zipfile.ZipInfo(entry, ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED

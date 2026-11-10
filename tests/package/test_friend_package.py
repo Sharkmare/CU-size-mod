@@ -50,7 +50,7 @@ class FriendPackageTests(unittest.TestCase):
     def test_install_text_names_requirements_commands_limits_and_warnings(self):
         with zipfile.ZipFile(self.zip_path) as archive:
             text = archive.read(package.INSTALL_ENTRY).decode("utf-8")
-        for needle in ("dune.2", "5.4.23.5", "size <target> <factor>", "0.25 to 4", "achievements", "Not tested", "9.9.9"):
+        for needle in (package.TOGETHER_REQUIREMENT, "5.4.23.5", "size <target> <factor>", "0.25 to 4", "achievements", "Not tested", "9.9.9"):
             self.assertIn(needle, text)
 
     def test_build_is_reproducible(self):
