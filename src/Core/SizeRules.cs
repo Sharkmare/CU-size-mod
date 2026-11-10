@@ -33,8 +33,8 @@ namespace CasualtiesSize.Core
 
         public static readonly IReadOnlyList<RuleDefinition> Definitions = new List<RuleDefinition>
         {
-            new RuleDefinition("SizeMin", 0.1f, 0.01f, 1f, false, "Smallest allowed size factor."),
-            new RuleDefinition("SizeMax", 10f, 1f, 100f, false, "Largest allowed size factor."),
+            new RuleDefinition("SizeMin", 0.25f, 0.01f, 1f, false, "Smallest allowed size factor."),
+            new RuleDefinition("SizeMax", 4f, 1f, 100f, false, "Largest allowed size factor."),
             new RuleDefinition("SizePermission", PermissionAnyone, 0, 2, true, "Who may size whom: 0 anyone, 1 self only, 2 host only."),
             new RuleDefinition("SizeEaseSeconds", 0.4f, 0f, 10f, false, "Seconds a size change takes to play out."),
             new RuleDefinition("DamageExponent", 0.75f, 0f, 3f, false, "Melee damage and victim fragility follow (attacker size / victim size) to this power."),

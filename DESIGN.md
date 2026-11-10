@@ -48,7 +48,7 @@ Soft dependency: `[BepInDependency("CasualtiesMP", SoftDependency)]`. `TogetherB
 
 ## Size state
 
-`SizeBook`: `Dictionary<int playerKey, float size>`; key is the Together `playerId` in multiplayer and `0` in singleplayer. Size is clamped to `[SizeMin, SizeMax]` (defaults 0.1 and 10). The book on the host is authoritative; clients hold a mirror.
+`SizeBook`: `Dictionary<int playerKey, float size>`; key is the Together `playerId` in multiplayer and `0` in singleplayer. Size is clamped to `[SizeMin, SizeMax]` (defaults 0.25 and 4; a request outside is refused with that message). The book on the host is authoritative; clients hold a mirror.
 
 `BodySizer` adds a `SizedBody` component to the Body GameObject. `SizedBody`:
 

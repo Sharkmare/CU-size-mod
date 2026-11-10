@@ -58,6 +58,8 @@ namespace CasualtiesSize
             List<int> keys;
             string error;
             if (!environment.ResolveTargets(command.Target, caller, out keys, out error)) return error;
+            if (command.Verb == SizeVerb.Set && (command.Factor < SizeBook.Rules.SizeMin || command.Factor > SizeBook.Rules.SizeMax))
+                return "size must be between " + SizeRules.Format(SizeBook.Rules.SizeMin) + " and " + SizeRules.Format(SizeBook.Rules.SizeMax) + " (rules SizeMin and SizeMax)";
             StringBuilder reply = new StringBuilder();
             List<int> changed = new List<int>();
             foreach (int key in keys)

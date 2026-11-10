@@ -1,3 +1,5 @@
+import hashlib
+import math
 import os
 import shutil
 import sys
@@ -22,6 +24,31 @@ SIZE_TOLERANCE = 0.03
 MASS_FIELD = "limbs[0].baseMass"
 HEIGHT_FIELD = "heightMultiplier"
 LIMB_SCALE_FIELD = "limbs[0].transform.localScale.x"
+
+
+TOGETHER_DLL = os.path.join("BepInEx", "plugins", "Together", "CasualtiesMP.dll")
+EXPECTED_TOGETHER_MD5 = os.environ.get("CU_TOGETHER_MD5", "")
+LIMB_COUNT = 10
+TORSO = 2
+STABLE_SPREAD_LOW = 1.4
+STABLE_SPREAD_HIGH = 2.8
+MAX_COORDINATE = 100000.0
+
+
+def together_md5():
+    with open(os.path.join(game_dir(), TOGETHER_DLL), "rb") as handle:
+        return hashlib.md5(handle.read()).hexdigest()
+
+
+def limb_spread(game, name):
+    handle = body_handle(game, name)
+    points = []
+    for index in range(LIMB_COUNT):
+        position = game.get(handle, "limbs[%d].transform.position" % index)
+        points.append((position["x"], position["y"]))
+    torso = points[TORSO]
+    finite = all(math.isfinite(x) and math.isfinite(y) and abs(x) < MAX_COORDINATE and abs(y) < MAX_COORDINATE for x, y in points)
+    return finite, max(math.hypot(x - torso[0], y - torso[1]) for x, y in points)
 
 
 def body_handle(game, name):
@@ -67,11 +94,21 @@ class SizePairCase(PairCase):
     def setUpClass(cls):
         if not os.path.isdir(installed_plugin_folder()):
             raise unittest.SkipTest("CasualtiesSize is not installed in " + installed_plugin_folder())
+        actual = together_md5()
+        print("Together CasualtiesMP.dll md5 %s" % actual)
+        if EXPECTED_TOGETHER_MD5 and not actual.startswith(EXPECTED_TOGETHER_MD5):
+            raise unittest.SkipTest("Together md5 %s is not the expected %s" % (actual, EXPECTED_TOGETHER_MD5))
         super().setUpClass()
         cls.prefab = {
             "host": geometry(cls.host, HOST_BODY),
             "client": geometry(cls.client, CLIENT_BODY),
         }
+
+    def setUp(self):
+        self.host.console("sizerule SizePermission 0")
+        self.host.console("size @a reset")
+        for name in (HOST_BODY, CLIENT_BODY):
+            self.assertIsNotNone(self.size_of_everywhere(name, 1.0), "could not return " + name + " to size 1 before the test")
 
     def size_of_everywhere(self, name, expected):
         def converged():
@@ -95,6 +132,29 @@ class ReplicationTests(SizePairCase):
         for row in rows:
             self.assertAlmostEqual(row["mass"], self.prefab["host"]["mass"] * 4.0, delta=self.prefab["host"]["mass"] * 0.2)
             self.assertAlmostEqual(row["limb"], self.prefab["host"]["limb"] * 2.0, delta=0.1)
+
+    def test_sized_ragdoll_stays_stable_on_both_games(self):
+        _, base = limb_spread(self.host, HOST_BODY)
+        self.host.console("size @m 2")
+        self.assertIsNotNone(self.size_of_everywhere(HOST_BODY, 2.0))
+        self.host.hold(action="ragdoll")
+        try:
+            for _ in range(30):
+                self.host.step(10)
+            time.sleep(2.0)
+            for label, game in (("host", self.host), ("client", self.client)):
+                finite, spread = limb_spread(game, HOST_BODY)
+                self.assertTrue(finite, label + " limbs left the world")
+                self.assertTrue(STABLE_SPREAD_LOW * base < spread < STABLE_SPREAD_HIGH * base, "%s ragdoll spread %.2f vs prefab %.2f" % (label, spread, base))
+        finally:
+            self.host.release(action="ragdoll")
+        self.host.console("size @m reset")
+
+    def test_out_of_range_is_refused_with_a_message(self):
+        self.host.console("size @m 50")
+        refused = wait_until(lambda: "size must be between" in console_text(self.host))
+        self.assertTrue(refused, console_text(self.host)[-300:])
+        self.assertAlmostEqual(geometry(self.host, HOST_BODY)["height"], self.prefab["host"]["height"], delta=SIZE_TOLERANCE)
 
     def test_client_sizes_the_host_because_anyone_may(self):
         self.client.console("size HostD 0.5")
