@@ -28,6 +28,7 @@ namespace CasualtiesSize
 
         private static float lastHelloTime = -100f;
         private static bool wasRunning;
+        private static bool fallbackLogged;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void Start()
@@ -303,10 +304,16 @@ namespace CasualtiesSize
                 Welcomed = false;
                 RefusalText = null;
                 FirstHelloTime = -1f;
+                fallbackLogged = false;
                 lastHelloTime = -100f;
             }
             if (!running || Net.IsServer || Welcomed || RefusalText != null) return;
             if (!Net.IsConnected || ScavPlayer.LocalPlayer == null) return;
+            if (FirstHelloTime >= 0f && !fallbackLogged && Time.unscaledTime - FirstHelloTime > HelloTimeoutSeconds)
+            {
+                fallbackLogged = true;
+                Plugin.Log.LogInfo("The host did not answer, so sizes are off in this game unless the host has CasualtiesSize.");
+            }
             if (Time.unscaledTime - lastHelloTime < HelloRetrySeconds) return;
             lastHelloTime = Time.unscaledTime;
             if (FirstHelloTime < 0f) FirstHelloTime = Time.unscaledTime;
